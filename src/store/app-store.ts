@@ -78,13 +78,16 @@ const DEFAULT_CENTER: Coordinates = {
 
 const DEFAULT_ZOOM = parseInt(process.env.NEXT_PUBLIC_DEFAULT_ZOOM || '13', 10);
 
+const DEMO_ORIGIN = DEMO_ROUTES[0].origin;
+const DEMO_DEST = DEMO_ROUTES[0].destination;
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      // Initial state
+      // Initial state — pre-filled USA demo so Vercel shows routes instantly
       userLocation: null,
-      origin: null,
-      destination: null,
+      origin: DEMO_ORIGIN,
+      destination: DEMO_DEST,
       selectedProfile: USER_PROFILES[0],
       selectedMode: 'balanced',
       routes: [],
