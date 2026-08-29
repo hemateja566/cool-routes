@@ -67,14 +67,15 @@ export default function HomePage() {
       if (res.routes.length > 0) setSelectedRoute(res.routes.find(r => r.name === selectedMode) || res.routes[0]);
       if (res.warnings?.length) setRoutingError(res.warnings[0]);
     } catch (e: any) {
-      setRoutingError(e?.message || 'Routing failed');
-      if (useDemoMode) {
-        // fallback to demo anyway
-        const req: any = { origin, destination, profileId: selectedProfile.id, mode: selectedMode };
-        const res = await calculateDemoRoutes(req);
-        setRoutes(res.routes);
-        setSelectedRoute(res.routes[0]);
-        setRoutingError('Demo mode active - showing simulated data');
+      console.warn('Live routing failed, falling back to demo:', e?.message);
+      try {
+        const req2: any = { origin, destination, profileId: selectedProfile.id, mode: selectedMode };
+        const res2 = await calculateDemoRoutes(req2);
+        setRoutes(res2.routes);
+        setSelectedRoute(res2.routes.find(r => r.name === selectedMode) || res2.routes[0]);
+        setRoutingError(`Live API failed (${e?.message?.slice(0,120) || 'unknown'}). Showing demo-simulated USA heat — click Demo Mode to hide this.`);
+      } catch (e2: any) {
+        setRoutingError(e2?.message || 'Routing failed');
       }
     } finally {
       setIsRouting(false);

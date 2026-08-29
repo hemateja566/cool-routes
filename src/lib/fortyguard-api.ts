@@ -89,6 +89,9 @@ async function apiRequest<T>(
       ...options,
       headers: {
         'Authorization': `Bearer ${API_KEY}`,
+        'x-api-key': `${API_KEY}`,
+        'X-API-Key': `${API_KEY}`,
+        'apikey': `${API_KEY}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         ...options.headers,
