@@ -105,7 +105,7 @@ export const useAppStore = create<AppState>()(
       selectedDemo: null,
       avoidHighHeat: true,
       maxDetourFactor: 1.5,
-      useDemoMode: process.env.NEXT_PUBLIC_DEMO_MODE === 'true',
+      useDemoMode: process.env.NEXT_PUBLIC_DEMO_MODE !== 'false', // default to demo for hackathon
       
       // Actions
       setUserLocation: (loc) => set({ userLocation: loc }),

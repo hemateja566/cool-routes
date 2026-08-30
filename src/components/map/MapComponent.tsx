@@ -46,6 +46,7 @@ export function MapComponent({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [heatmapData, setHeatmapData] = useState<GeoJSON.FeatureCollection | null>(null);
   const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   // Initialize map
   useEffect(() => {
@@ -54,16 +55,22 @@ export function MapComponent({
     const mapStyle = process.env.NEXT_PUBLIC_MAP_STYLE_URL || 
       'https://demotiles.maplibre.org/style.json';
 
-    const newMap = new maplibregl.Map({
-      container: mapContainer.current,
-      style: mapStyle,
-      center: [center.lng, center.lat],
-      zoom,
-      pitch: 0,
-      bearing: 0,
-      antialias: true,
-      preserveDrawingBuffer: true,
-    });
+    let newMap: maplibregl.Map;
+    try {
+      newMap = new maplibregl.Map({
+        container: mapContainer.current,
+        style: mapStyle,
+        center: [center.lng, center.lat],
+        zoom,
+        pitch: 0,
+        bearing: 0,
+        antialias: true,
+        preserveDrawingBuffer: true,
+      });
+    } catch (err) {
+      setMapError('Failed to initialize map');
+      return;
+    }
 
     newMap.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     newMap.addControl(new maplibregl.GeolocateControl({
@@ -353,9 +360,23 @@ export function MapComponent({
     <div
       ref={mapContainer}
       className={clsx('w-full h-full', className)}
-      style={{ width: '100%', height: '100%' }}
+      style={{ width: '100%', height: '100%', minHeight: '400px' }}
     >
-      {!mapLoaded && (
+      {mapError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10 p-4">
+          <div className="text-center text-red-600">
+            <div className="font-semibold">Map failed to load</div>
+            <div className="text-sm text-gray-600 mt-1">{mapError}</div>
+            <button 
+              onClick={() => { setMapError(null); window.location.reload(); }}
+              className="mt-3 px-4 py-2 bg-teal-600 text-white rounded-xl text-sm"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+      {!mapLoaded && !mapError && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
           <div className="flex flex-col items-center gap-3 text-gray-600">
             <div className="animate-spin rounded-full h-10 w-10 border-3 border-teal-500 border-t-transparent"></div>

@@ -35,19 +35,9 @@ export default function HomePage() {
     avoidHighHeat, activeTab, setActiveTab,
   } = useAppStore();
 
-  const [originInput, setOriginInput] = useState('');
-  const [destInput, setDestInput] = useState('');
-
-  // Initialize default locations — USA only (Phoenix)
-  useEffect(() => {
-    if (!origin && !destination) {
-      const demo = DEMO_ROUTES[0];
-      setOrigin(demo.origin);
-      setDestination(demo.destination);
-      setOriginInput('Phoenix — Roosevelt Row');
-      setDestInput('Downtown Arts District');
-    }
-  }, []);
+  const [hasInitialized, setHasInitialized] = useState(false);
+  const [originInput, setOriginInput] = useState('Phoenix — Roosevelt Row');
+  const [destInput, setDestInput] = useState('Downtown Arts District');
 
   const runRouting = useCallback(async () => {
     if (!origin || !destination) return;
@@ -81,6 +71,14 @@ export default function HomePage() {
       setIsRouting(false);
     }
   }, [origin, destination, selectedProfile.id, selectedMode, avoidHighHeat, useDemoMode]);
+
+  // Synchronous initial route calculation for immediate display
+  useEffect(() => {
+    if (!hasInitialized && origin && destination && routes.length === 0) {
+      setHasInitialized(true);
+      runRouting();
+    }
+  }, [hasInitialized, origin, destination, routes.length, runRouting]);
 
   useEffect(() => {
     runRouting();
