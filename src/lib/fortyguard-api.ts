@@ -11,6 +11,13 @@ import type {
 const API_KEY = process.env.NEXT_PUBLIC_FORTYGUARD_API_KEY;
 const BASE_URL = process.env.NEXT_PUBLIC_FORTYGUARD_BASE_URL || 'https://api.fortyguard.com/v1';
 
+// FortyGuard Temperature API uses 'api-key' header (not Bearer)
+const API_HEADERS = {
+  'api-key': API_KEY || '',
+  'Content-Type': 'application/json',
+  'Accept': 'application/json',
+};
+
 // In-memory cache with TTL
 interface CacheEntry<T> {
   data: T;
@@ -88,12 +95,7 @@ async function apiRequest<T>(
     const res = await fetch(url.toString(), {
       ...options,
       headers: {
-        'Authorization': `Bearer ${API_KEY}`,
-        'x-api-key': `${API_KEY}`,
-        'X-API-Key': `${API_KEY}`,
-        'apikey': `${API_KEY}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        ...API_HEADERS,
         ...options.headers,
       },
     });
