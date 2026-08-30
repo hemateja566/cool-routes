@@ -4,7 +4,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/app-store';
 import { calculateHeatAwareRoutes, calculateDemoRoutes } from '@/lib/routing-engine';
 import { DEMO_ROUTES, USER_PROFILES } from '@/types';
-import { MapComponent } from '@/components/map/MapComponent';
+import dynamic from 'next/dynamic';
+
+const MapComponent = dynamic(
+  () => import('@/components/map/MapComponent').then((mod) => mod.MapComponent),
+  { ssr: false, loading: () => <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400">Loading map...</div> }
+);
 import { RouteCard } from '@/components/routes/RouteCard';
 import { ProfileSelector } from '@/components/profile/ProfileSelector';
 import { formatDistance, formatDuration, getWBGTColor, getWBGTLabel } from '@/lib/heat-calculations';
