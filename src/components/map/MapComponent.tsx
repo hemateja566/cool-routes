@@ -49,6 +49,8 @@ export function MapComponent({
   const [heatmapData, setHeatmapData] = useState<GeoJSON.FeatureCollection | null>(null);
   const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const onMapClickRef = useRef(onMapClick);
+  useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
 
   // Initialize map
   useEffect(() => {
@@ -95,7 +97,7 @@ export function MapComponent({
     });
 
     newMap.on('click', (e) => {
-      onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+      onMapClickRef.current({ lat: e.lngLat.lat, lng: e.lngLat.lng });
     });
 
     map.current = newMap;
@@ -157,37 +159,7 @@ export function MapComponent({
       });
     }
 
-    // Add 3D buildings layer - shows every building clearly
-    if (!mapInstance.getLayer('3d-buildings')) {
-      // Find label layer to insert below
-      const layers = mapInstance.getStyle().layers;
-      let labelLayerId: string | undefined;
-      for (const layer of layers) {
-        if (layer.type === 'symbol' && (layer as any).layout?.['text-field']) {
-          labelLayerId = layer.id;
-          break;
-        }
-      }
-      // OpenFreeMap Liberty uses 'building' source
-      const buildingSource = (mapInstance.getStyle().sources as any)?.openmaptiles ? 'openmaptiles' : 'openmaptiles';
-      if (mapInstance.getSource(buildingSource)) {
-        try {
-          mapInstance.addLayer({
-            id: '3d-buildings',
-            source: buildingSource,
-            'source-layer': 'building',
-            type: 'fill-extrusion',
-            minzoom: 14,
-            paint: {
-              'fill-extrusion-color': '#d6d6d6',
-              'fill-extrusion-height': ['get', 'render_height'],
-              'fill-extrusion-base': ['get', 'render_min_height'],
-              'fill-extrusion-opacity': 0.6,
-            },
-          }, labelLayerId);
-        } catch (e) { /* building layer optional */ }
-      }
-    }
+    // Liberty already includes 'building' and 'building-3d' layers (every building at z14) - no extra needed
 
     // Route layers will be added dynamically
     heatmapSourceAdded.current = true;
