@@ -156,10 +156,26 @@ export default function HomePage() {
   useEffect(() => {
     if (origin && destination) {
       handleCalculateRoutes();
+    } else if (!origin || !destination) {
+      // Clear routes when one location removed
+      setRoutes([]);
+      setSelectedRoute(null);
     }
   }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng, selectedProfile?.id, selectedMode, avoidHighHeat]);
 
-  // Handle map click - max 2 locations, update destination if both exist
+  // Clear all locations and routes
+  const handleClearAll = useCallback(() => {
+    setOrigin(null);
+    setDestination(null);
+    setOriginInput('');
+    setDestInput('');
+    setRoutes([]);
+    setSelectedRoute(null);
+    setRoutingError(null);
+    setLastRouteResponse(null);
+  }, [setOrigin, setDestination, setRoutes, setSelectedRoute, setRoutingError, setLastRouteResponse]);
+
+  // Handle map click - max 2 locations
   const handleMapClick = (coords: { lat: number; lng: number }) => {
     if (!origin) {
       setOrigin(coords);
@@ -168,9 +184,26 @@ export default function HomePage() {
       setDestination(coords);
       setDestInput(`${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
     } else {
-      // Both set - update destination (visible route stays)
+      // Both set - update destination
       setDestination(coords);
       setDestInput(`${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
+    }
+  };
+
+  // Handle manual input - parse lat,lng
+  const handleOriginInputChange = (val: string) => {
+    setOriginInput(val);
+    const parts = val.split(',').map(s => parseFloat(s.trim()));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      setOrigin({ lat: parts[0], lng: parts[1] });
+      setMapCenter({ lat: parts[0], lng: parts[1] });
+    }
+  };
+  const handleDestInputChange = (val: string) => {
+    setDestInput(val);
+    const parts = val.split(',').map(s => parseFloat(s.trim()));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      setDestination({ lat: parts[0], lng: parts[1] });
     }
   };
 
@@ -255,12 +288,12 @@ export default function HomePage() {
         <div className="p-4 border-b border-gray-100 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold text-gray-600">
-              {origin && destination ? '2/2 locations set • Route visible' : origin || destination ? '1/2 location set • Click map for second' : '0/2 locations • Click map to set points'}
+              {origin && destination ? '2/2 locations set • Route visible on map' : origin || destination ? '1/2 location set • Click map for second' : '0/2 locations • Click map to set points'}
             </p>
             {(origin || destination) && (
               <button
-                onClick={() => { setOrigin(null); setDestination(null); setOriginInput(''); setDestInput(''); setRoutes([]); setRoutingError(null); }}
-                className="text-xs text-red-500 hover:text-red-700 font-medium"
+                onClick={handleClearAll}
+                className="text-xs bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-full font-medium"
               >
                 Clear all
               </button>
@@ -269,21 +302,20 @@ export default function HomePage() {
           <div className="space-y-2">
             <label className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
               <span className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">1</span> Origin
-              {origin && <span className="ml-auto text-xs text-green-600 font-normal">✓ set • <button onClick={() => { setOrigin(null); setOriginInput(''); }} className="underline hover:text-red-600">Remove</button></span>}
+              {origin && <span className="ml-auto text-xs text-green-600 font-normal">✓ set • <button onClick={() => { setOrigin(null); setOriginInput(''); setRoutes([]); }} className="underline hover:text-red-600">Remove</button></span>}
             </label>
             <div className="relative">
               <MapPin className="absolute left-3 top-3 w-4 h-4 text-green-500" />
               <input
                 type="text"
-                readOnly
-                placeholder="Click map or use current location"
+                placeholder="Click map or type lat,lng"
                 value={originInput}
-                onChange={(e) => setOriginInput(e.target.value)}
+                onChange={(e) => handleOriginInputChange(e.target.value)}
                 className={cn("w-full pl-9 pr-10 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent", origin ? "bg-green-50 border-green-300 text-gray-900" : "bg-gray-50 border-gray-200")}
               />
               {origin && (
                 <button
-                  onClick={() => { setOrigin(null); setOriginInput(''); }}
+                  onClick={() => { setOrigin(null); setOriginInput(''); setRoutes([]); }}
                   className="absolute right-2 top-2 p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-300 shadow-sm"
                   title="Remove origin"
                 >
@@ -296,21 +328,20 @@ export default function HomePage() {
           <div className="space-y-2">
             <label className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
               <span className="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">2</span> Destination
-              {destination && <span className="ml-auto text-xs text-red-600 font-normal">✓ set • <button onClick={() => { setDestination(null); setDestInput(''); }} className="underline hover:text-red-600">Remove</button></span>}
+              {destination && <span className="ml-auto text-xs text-red-600 font-normal">✓ set • <button onClick={() => { setDestination(null); setDestInput(''); setRoutes([]); }} className="underline hover:text-red-600">Remove</button></span>}
             </label>
             <div className="relative">
               <Navigation className="absolute left-3 top-3 w-4 h-4 text-red-500" />
               <input
                 type="text"
-                readOnly
                 placeholder="Click map for destination"
                 value={destInput}
-                onChange={(e) => setDestInput(e.target.value)}
+                onChange={(e) => handleDestInputChange(e.target.value)}
                 className={cn("w-full pl-9 pr-10 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent", destination ? "bg-red-50 border-red-300 text-gray-900" : "bg-gray-50 border-gray-200")}
               />
               {destination && (
                 <button
-                  onClick={() => { setDestination(null); setDestInput(''); }}
+                  onClick={() => { setDestination(null); setDestInput(''); setRoutes([]); }}
                   className="absolute right-2 top-2 p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-300 shadow-sm"
                   title="Remove destination"
                 >

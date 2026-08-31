@@ -43,6 +43,7 @@ export function MapComponent({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const heatmapSourceAdded = useRef(false);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [heatmapData, setHeatmapData] = useState<GeoJSON.FeatureCollection | null>(null);
   const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
@@ -288,11 +289,13 @@ export function MapComponent({
     });
   }, [routes, selectedRoute, mapLoaded]);
 
-  // Update markers
+  // Update markers - properly remove all previous markers
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
     
-    // Remove existing markers
+    // Remove existing markers via stored refs
+    markersRef.current.forEach(m => m.remove());
+    markersRef.current = [];
     ['origin-marker', 'destination-marker'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.remove();
@@ -312,9 +315,10 @@ export function MapComponent({
         <div class="marker-label">Start</div>
       `;
       
-      new (maplibregl as any).Marker(el, { anchor: 'bottom' })
+      const m1 = new (maplibregl as any).Marker(el, { anchor: 'bottom' })
         .setLngLat([origin.lng, origin.lat])
         .addTo(map.current);
+      markersRef.current.push(m1);
     }
     
     // Add destination marker
@@ -332,9 +336,10 @@ export function MapComponent({
         <div class="marker-label">End</div>
       `;
       
-      new (maplibregl as any).Marker(el, { anchor: 'bottom' })
+      const m2 = new (maplibregl as any).Marker(el, { anchor: 'bottom' })
         .setLngLat([destination.lng, destination.lat])
         .addTo(map.current);
+      markersRef.current.push(m2);
     }
   }, [origin, destination, mapLoaded]);
 
