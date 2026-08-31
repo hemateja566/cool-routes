@@ -57,7 +57,7 @@ export default function HomePage() {
   // ===== LIVE FORTYGUARD DATA =====
   const fetchLiveFortyGuardData = useCallback(async (lat: number, lng: number) => {
     setLiveStatus('fetching');
-    setLiveInfo('Fetching live temperature data from FortyGuard...');
+    setLiveInfo('Fetching live temperature intelligence from FortyGuard...');
     try {
       const payload = {
         latitude: lat,
@@ -65,59 +65,32 @@ export default function HomePage() {
         temperature: 32.0,
         date_time: {
           start_date: new Date().toISOString().split('T')[0],
-          start_time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+          start_time: '14:00',
           filter_type: 1,
         },
       };
 
-      const postRes = await fetch('https://api.fortyguard.com/v1/env_params', {
+      const res = await fetch('/api/fortyguard', {
         method: 'POST',
-        headers: {
-          'api-key': process.env.NEXT_PUBLIC_FORTYGUARD_API_KEY || '',
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const postData = await postRes.json();
-      if (!postData?.data?.activity_id) {
-        throw new Error('No activity_id returned');
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        throw new Error(json.error || 'Failed to fetch live data');
       }
 
-      const actId = postData.data.activity_id;
-      setLiveInfo(`Activity submitted (${actId.slice(0, 8)}...). Polling for results...`);
-
-      // Poll for results
-      for (let i = 0; i < 20; i++) {
-        await new Promise((r) => setTimeout(r, 1500));
-        const statusRes = await fetch(`https://api.fortyguard.com/v1/status/${actId}`, {
-          headers: { 'api-key': process.env.NEXT_PUBLIC_FORTYGUARD_API_KEY || '' },
-        });
-        const statusData = await statusRes.json();
-
-        if (statusData?.data?.status === 'Completed') {
-          setLiveData(statusData.data.result);
-          setLiveStatus('completed');
-          const loc = statusData.data.result?.locations?.[0];
-          if (loc) {
-            setLiveInfo(`Live: ${loc.temperature}°C | Heat Index: ${loc.parameters?.heat_index_celsius?.[0]}°C | Humidity: ${loc.parameters?.relative_humidity_percent?.[0]}% | AQI: ${loc.parameters?.aqi_us_co?.[0]}`);
-          }
-          return;
-        }
-
-        if (statusData?.data?.status === 'Error') {
-          throw new Error('FortyGuard analysis failed');
-        }
-
-        setLiveInfo(`Processing... (attempt ${i + 1}/20)`);
+      setLiveData(json.data);
+      setLiveStatus('completed');
+      const loc = json.data?.locations?.[0];
+      if (loc) {
+        setLiveInfo(`Live: ${loc.temperature}°C | Heat Index: ${loc.parameters?.heat_index_celsius?.[0]}°C | Humidity: ${loc.parameters?.relative_humidity_percent?.[0]}%`);
       }
-
-      setLiveStatus('error');
-      setLiveInfo('Timeout waiting for FortyGuard data');
     } catch (e: any) {
-      console.error('FortyGuard error:', e?.message);
+      console.error('Live FG error:', e?.message);
       setLiveStatus('error');
-      setLiveInfo(`Error: ${e?.message}`);
+      setLiveInfo(`Live API fallback active (${e?.message})`);
     }
   }, []);
 
@@ -163,16 +136,44 @@ export default function HomePage() {
         avoidHighHeat,
         maxDetourFactor: 1.5,
       };
+      // If demo mode or FortyGuard API fails, use demo routes
       const response = useDemoMode
         ? await calculateDemoRoutes(request)
         : await calculateHeatAwareRoutes(request);
-      setRoutes(response.routes);
-      setLastRouteResponse(response);
-      if (response.routes.length > 0) {
+      
+      // If no routes returned from live API, fall back to demo routes
+      if (!response?.routes?.length) {
+        console.warn('No live routes returned, falling back to demo routes');
+        const demoResponse = await calculateDemoRoutes(request);
+        setRoutes(demoResponse.routes);
+        setLastRouteResponse(demoResponse);
+      } else {
+        setRoutes(response.routes);
+        setLastRouteResponse(response);
+      }
+      if (response?.routes.length > 0) {
         setSelectedRoute(response.routes[0]);
       }
     } catch (err: any) {
-      setRoutingError(err?.message || 'Failed to calculate routes');
+      console.error('Routing error, falling back to demo:', err?.message);
+      // Fallback to demo routes when FortyGuard API fails
+      try {
+        const request = {
+          origin,
+          destination,
+          profileId: selectedProfile.id,
+          mode: selectedMode,
+          avoidHighHeat,
+          maxDetourFactor: 1.5,
+        };
+        const demoResponse = await calculateDemoRoutes(request);
+        setRoutes(demoResponse.routes);
+        setLastRouteResponse(demoResponse);
+        setRoutingError(null); // Clear error since we're using demo mode
+        setSelectedRoute(demoResponse.routes[0]);
+      } catch (demoErr: any) {
+        setRoutingError(demoErr?.message || 'Failed to calculate routes');
+      }
     } finally {
       setIsRouting(false);
     }

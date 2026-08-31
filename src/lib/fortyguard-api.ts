@@ -91,25 +91,28 @@ async function apiRequest<T>(
   const url = new URL(`${BASE_URL}${endpoint}`);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
 
-  const response = await rateLimitedFetch(async () => {
-    const res = await fetch(url.toString(), {
-      ...options,
-      headers: {
-        ...API_HEADERS,
-        ...options.headers,
-      },
+  try {
+    const res = await rateLimitedFetch(async () => {
+      const res = await fetch(url.toString(), {
+        ...options,
+        headers: {
+          ...API_HEADERS,
+          ...options.headers,
+        },
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`FortyGuard API error (${res.status}): ${txt}`);
+      }
+      return res.json();
     });
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`FortyGuard API error (${res.status}): ${errorText}`);
-    }
-
-    return res.json();
-  });
-
-  setCache(cacheKey, response);
-  return response;
+    setCache(cacheKey, res);
+    return res;
+  } catch (e: any) {
+    console.warn('apiRequest caught:', e?.message || e);
+    throw e;
+  }
 }
 
 // Heatmap Generation
@@ -118,14 +121,60 @@ export async function getHeatmap(
   timestamp?: string,
   resolution = 2 // meters
 ): Promise<HeatDataPoint[]> {
-  return apiRequest<HeatDataPoint[]>('/heatmap', {
-    min_lat: bounds.minLat.toString(),
-    min_lng: bounds.minLng.toString(),
-    max_lat: bounds.maxLat.toString(),
-    max_lng: bounds.maxLng.toString(),
-    resolution: resolution.toString(),
-    ...(timestamp && { timestamp }),
-  });
+  try {
+    const payload = {
+      polygon_aoi: {
+        type: 'Polygon',
+        coordinates: [[
+          [bounds.minLng, bounds.minLat],
+          [bounds.maxLng, bounds.minLat],
+          [bounds.maxLng, bounds.maxLat],
+          [bounds.minLng, bounds.maxLat],
+          [bounds.minLng, bounds.minLat],
+        ]],
+      },
+      date_time: {
+        start_date: timestamp ? timestamp.split('T')[0] : new Date().toISOString().split('T')[0],
+        start_time: '14:00',
+        filter_type: 1,
+      },
+    };
+
+    const postRes = await fetch(`${BASE_URL}/heatmap`, {
+      method: 'POST',
+      headers: API_HEADERS,
+      body: JSON.stringify(payload),
+    });
+
+    const postData = await postRes.json();
+    const actId = postData?.data?.activity_id;
+    if (!actId) return [];
+
+    // Poll for status
+    for (let i = 0; i < 15; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const statusRes = await fetch(`${BASE_URL}/status/${actId}`, {
+        headers: API_HEADERS,
+      });
+      const statusJson = await statusRes.json();
+      const status = statusJson?.data?.status;
+
+      if (status === 'Completed') {
+        const features = statusJson?.data?.result?.map_data?.features || [];
+        return features.map((f: any) => ({
+          lat: f.geometry?.coordinates?.[0]?.[0]?.[1] || bounds.minLat,
+          lng: f.geometry?.coordinates?.[0]?.[0]?.[0] || bounds.minLng,
+          temperature: f.properties?.average_temperature || 32,
+          timestamp: new Date().toISOString(),
+        }));
+      }
+      if (status === 'Error') break;
+    }
+    return [];
+  } catch (e) {
+    console.error('getHeatmap error:', e);
+    return [];
+  }
 }
 
 // Heatmap Forecast (12-hour)

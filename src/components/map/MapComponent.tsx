@@ -53,7 +53,7 @@ export function MapComponent({
     if (map.current || !mapContainer.current) return;
 
     const mapStyle = process.env.NEXT_PUBLIC_MAP_STYLE_URL || 
-      'https://demotiles.maplibre.org/style.json';
+      'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
     let newMap: maplibregl.Map;
     try {
