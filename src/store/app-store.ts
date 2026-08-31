@@ -1,4 +1,4 @@
-// Global state management with Zustand
+// Global state management with Zustand - LIVE ONLY
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
@@ -8,9 +8,8 @@ import type {
   RouteOption,
   RouteRequest,
   RouteResponse,
-  DemoRoute,
 } from '@/types';
-import { USER_PROFILES, DEMO_ROUTES } from '@/types';
+import { USER_PROFILES } from '@/types';
 
 interface AppState {
   // User location & selection
@@ -35,14 +34,11 @@ interface AppState {
   
   // UI state
   isDrawerOpen: boolean;
-  activeTab: 'routes' | 'profile' | 'settings' | 'demo';
-  demoRoutes: DemoRoute[];
-  selectedDemo: DemoRoute | null;
+  activeTab: 'routes' | 'profile' | 'settings';
   
   // Settings
   avoidHighHeat: boolean;
   maxDetourFactor: number;
-  useDemoMode: boolean;
   
   // Actions
   setUserLocation: (loc: Coordinates | null) => void;
@@ -61,12 +57,9 @@ interface AppState {
   toggleHeatmap: () => void;
   setHeatmapOpacity: (opacity: number) => void;
   setDrawerOpen: (open: boolean) => void;
-  setActiveTab: (tab: 'routes' | 'profile' | 'settings' | 'demo') => void;
-  setSelectedDemo: (demo: DemoRoute | null) => void;
-  loadDemoRoute: (demo: DemoRoute) => void;
+  setActiveTab: (tab: 'routes' | 'profile' | 'settings') => void;
   setAvoidHighHeat: (avoid: boolean) => void;
   setMaxDetourFactor: (factor: number) => void;
-  setUseDemoMode: (demo: boolean) => void;
   clearRoute: () => void;
   reset: () => void;
 }
@@ -78,16 +71,13 @@ const DEFAULT_CENTER: Coordinates = {
 
 const DEFAULT_ZOOM = parseInt(process.env.NEXT_PUBLIC_DEFAULT_ZOOM || '13', 10);
 
-const DEMO_ORIGIN = DEMO_ROUTES[0].origin;
-const DEMO_DEST = DEMO_ROUTES[0].destination;
-
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      // Initial state — pre-filled USA demo so Vercel shows routes instantly
+      // Initial state - LIVE ONLY, no pre-filled demo
       userLocation: null,
-      origin: DEMO_ORIGIN,
-      destination: DEMO_DEST,
+      origin: null,
+      destination: null,
       selectedProfile: USER_PROFILES[0],
       selectedMode: 'balanced',
       routes: [],
@@ -101,11 +91,8 @@ export const useAppStore = create<AppState>()(
       heatmapOpacity: 0.7,
       isDrawerOpen: true,
       activeTab: 'routes',
-      demoRoutes: DEMO_ROUTES,
-      selectedDemo: null,
       avoidHighHeat: true,
       maxDetourFactor: 1.5,
-      useDemoMode: process.env.NEXT_PUBLIC_DEMO_MODE !== 'false', // default to demo for hackathon
       
       // Actions
       setUserLocation: (loc) => set({ userLocation: loc }),
@@ -128,20 +115,8 @@ export const useAppStore = create<AppState>()(
       setHeatmapOpacity: (opacity) => set({ heatmapOpacity: opacity }),
       setDrawerOpen: (open) => set({ isDrawerOpen: open }),
       setActiveTab: (tab) => set({ activeTab: tab }),
-      setSelectedDemo: (demo) => set({ selectedDemo: demo }),
-      loadDemoRoute: (demo) => {
-        const profile = USER_PROFILES.find(p => p.id === demo.profileId) || USER_PROFILES[0];
-        set({
-          origin: demo.origin,
-          destination: demo.destination,
-          selectedProfile: profile,
-          selectedDemo: demo,
-          activeTab: 'routes',
-        });
-      },
       setAvoidHighHeat: (avoid) => set({ avoidHighHeat: avoid }),
       setMaxDetourFactor: (factor) => set({ maxDetourFactor: factor }),
-      setUseDemoMode: (demo) => set({ useDemoMode: demo }),
       clearRoute: () => set({
         routes: [],
         selectedRoute: null,
@@ -155,7 +130,6 @@ export const useAppStore = create<AppState>()(
         selectedRoute: null,
         routingError: null,
         lastRouteResponse: null,
-        selectedDemo: null,
       }),
     }),
     {
@@ -170,7 +144,6 @@ export const useAppStore = create<AppState>()(
         heatmapOpacity: state.heatmapOpacity,
         avoidHighHeat: state.avoidHighHeat,
         maxDetourFactor: state.maxDetourFactor,
-        useDemoMode: state.useDemoMode,
       }),
     }
   )
@@ -193,6 +166,6 @@ export const useMapState = () => {
 };
 
 export const useUIState = () => {
-  const { isDrawerOpen, activeTab, selectedDemo, demoRoutes } = useAppStore();
-  return { isDrawerOpen, activeTab, selectedDemo, demoRoutes };
+  const { isDrawerOpen, activeTab } = useAppStore();
+  return { isDrawerOpen, activeTab };
 };

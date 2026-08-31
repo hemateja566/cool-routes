@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/app-store';
-import { calculateHeatAwareRoutes, calculateDemoRoutes } from '@/lib/routing-engine';
-import { DEMO_ROUTES, USER_PROFILES } from '@/types';
+import { calculateHeatAwareRoutes } from '@/lib/routing-engine';
+import { USER_PROFILES } from '@/types';
 import dynamic from 'next/dynamic';
 
 const MapComponent = dynamic(
@@ -36,7 +36,6 @@ export default function HomePage() {
     isRouting, setIsRouting, routingError, setRoutingError,
     mapCenter, setMapCenter, mapZoom, setMapZoom,
     showHeatmap, toggleHeatmap, heatmapOpacity,
-    useDemoMode, setUseDemoMode,
     avoidHighHeat, setAvoidHighHeat,
     activeTab, setActiveTab,
     userLocation, setUserLocation,
@@ -54,7 +53,7 @@ export default function HomePage() {
   const [liveInfo, setLiveInfo] = useState<string>('');
   const [locatingUser, setLocatingUser] = useState(false);
 
-  // ===== LIVE FORTYGUARD DATA =====
+  // ===== LIVE FORTYGUARD DATA - REQUIRED =====
   const fetchLiveFortyGuardData = useCallback(async (lat: number, lng: number) => {
     setLiveStatus('fetching');
     setLiveInfo('Fetching live temperature intelligence from FortyGuard...');
@@ -90,13 +89,13 @@ export default function HomePage() {
     } catch (e: any) {
       console.error('Live FG error:', e?.message);
       setLiveStatus('error');
-      setLiveInfo(`Live API fallback active (${e?.message})`);
+      setLiveInfo(`Live API error: ${e?.message} - Check FortyGuard key and try again`);
     }
   }, []);
 
   // Fetch live data on origin change
   useEffect(() => {
-    if (origin && process.env.NEXT_PUBLIC_FORTYGUARD_API_KEY) {
+    if (origin) {
       fetchLiveFortyGuardData(origin.lat, origin.lng);
     }
   }, [origin?.lat, origin?.lng, fetchLiveFortyGuardData]);
@@ -122,7 +121,7 @@ export default function HomePage() {
     );
   };
 
-  // ===== ROUTE CALCULATION =====
+  // ===== ROUTE CALCULATION - LIVE ONLY =====
   const handleCalculateRoutes = useCallback(async () => {
     if (!origin || !destination) return;
     setIsRouting(true);
@@ -136,55 +135,29 @@ export default function HomePage() {
         avoidHighHeat,
         maxDetourFactor: 1.5,
       };
-      // If demo mode or FortyGuard API fails, use demo routes
-      const response = useDemoMode
-        ? await calculateDemoRoutes(request)
-        : await calculateHeatAwareRoutes(request);
+      const response = await calculateHeatAwareRoutes(request);
       
-      // If no routes returned from live API, fall back to demo routes
       if (!response?.routes?.length) {
-        console.warn('No live routes returned, falling back to demo routes');
-        const demoResponse = await calculateDemoRoutes(request);
-        setRoutes(demoResponse.routes);
-        setLastRouteResponse(demoResponse);
-      } else {
-        setRoutes(response.routes);
-        setLastRouteResponse(response);
+        throw new Error('No routes returned from live API');
       }
-      if (response?.routes.length > 0) {
-        setSelectedRoute(response.routes[0]);
-      }
+      setRoutes(response.routes);
+      setLastRouteResponse(response);
+      setSelectedRoute(response.routes[0]);
     } catch (err: any) {
-      console.error('Routing error, falling back to demo:', err?.message);
-      // Fallback to demo routes when FortyGuard API fails
-      try {
-        const request = {
-          origin,
-          destination,
-          profileId: selectedProfile.id,
-          mode: selectedMode,
-          avoidHighHeat,
-          maxDetourFactor: 1.5,
-        };
-        const demoResponse = await calculateDemoRoutes(request);
-        setRoutes(demoResponse.routes);
-        setLastRouteResponse(demoResponse);
-        setRoutingError(null); // Clear error since we're using demo mode
-        setSelectedRoute(demoResponse.routes[0]);
-      } catch (demoErr: any) {
-        setRoutingError(demoErr?.message || 'Failed to calculate routes');
-      }
+      console.error('Routing error:', err?.message);
+      setRoutingError(err?.message || 'Failed to calculate live routes. Check FortyGuard API and try again.');
+      setRoutes([]);
     } finally {
       setIsRouting(false);
     }
-  }, [origin, destination, selectedProfile, selectedMode, avoidHighHeat, useDemoMode, setRoutes, setSelectedRoute, setIsRouting, setRoutingError, setLastRouteResponse]);
+  }, [origin, destination, selectedProfile, selectedMode, avoidHighHeat, setRoutes, setSelectedRoute, setIsRouting, setRoutingError, setLastRouteResponse]);
 
   // Auto-calculate routes when origin/destination change
   useEffect(() => {
     if (origin && destination) {
       handleCalculateRoutes();
     }
-  }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng, selectedProfile?.id, selectedMode, avoidHighHeat, useDemoMode]);
+  }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng, selectedProfile?.id, selectedMode, avoidHighHeat]);
 
   // Handle map click for origin/destination
   const handleMapClick = (coords: { lat: number; lng: number }) => {
@@ -219,7 +192,7 @@ export default function HomePage() {
             </div>
             <div>
               <h1 className="text-lg font-bold text-gray-900 leading-tight">CoolRoutes</h1>
-              <p className="text-xs text-gray-500">Heat-Safe Navigation</p>
+              <p className="text-xs text-gray-500">Heat-Safe Navigation • Live FortyGuard</p>
             </div>
           </div>
 
@@ -239,7 +212,7 @@ export default function HomePage() {
             )}
             {liveStatus === 'error' && (
               <span className="flex items-center gap-1.5 text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full">
-                API Offline
+                Live Error
               </span>
             )}
 
@@ -272,7 +245,7 @@ export default function HomePage() {
           destination={destination}
           showHeatmap={showHeatmap}
           heatmapOpacity={heatmapOpacity}
-          heatmapBounds={lastRouteResponse?.heatmapBounds || null}
+          heatmapBounds={heatmapBounds}
           onMapClick={handleMapClick}
         />
       </div>
@@ -285,7 +258,7 @@ export default function HomePage() {
             <MapPin className="absolute left-3 top-3 w-4 h-4 text-green-500" />
             <input
               type="text"
-              placeholder="Origin (click map or type)"
+              placeholder="Origin (click map or use current location)"
               value={originInput}
               onChange={(e) => setOriginInput(e.target.value)}
               className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
@@ -304,7 +277,7 @@ export default function HomePage() {
             <Navigation className="absolute left-3 top-3 w-4 h-4 text-red-500" />
             <input
               type="text"
-              placeholder="Destination (click map or type)"
+              placeholder="Destination (click map)"
               value={destInput}
               onChange={(e) => setDestInput(e.target.value)}
               className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
@@ -398,26 +371,11 @@ export default function HomePage() {
             />
           )}
 
-          {/* Settings Tab */}
+          {/* Settings Tab - LIVE ONLY */}
           {activeTab === 'settings' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-700">Demo Mode (no API)</span>
-                <button
-                  onClick={() => setUseDemoMode(!useDemoMode)}
-                  className={cn(
-                    'relative w-11 h-6 rounded-full transition-colors',
-                    useDemoMode ? 'bg-teal-500' : 'bg-gray-300'
-                  )}
-                >
-                  <span className={cn(
-                    'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform',
-                    useDemoMode ? 'translate-x-5.5 left-[1px]' : 'translate-x-0.5 left-[1px]'
-                  )} />
-                </button>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-700">Show Heatmap</span>
+                <span className="text-sm text-gray-700">Show Heatmap (FortyGuard)</span>
                 <button
                   onClick={toggleHeatmap}
                   className={cn(
@@ -446,31 +404,9 @@ export default function HomePage() {
                   )} />
                 </button>
               </div>
-
-              {/* Demo Routes */}
               <div className="pt-4 border-t border-gray-100">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Demo Routes</h3>
-                <div className="space-y-2">
-                  {DEMO_ROUTES.map((demo) => (
-                    <button
-                      key={demo.id}
-                      onClick={() => {
-                        setOrigin(demo.origin);
-                        setDestination(demo.destination);
-                        setOriginInput(demo.name);
-                        setDestInput(`${demo.destination.lat.toFixed(4)}, ${demo.destination.lng.toFixed(4)}`);
-                        const profile = USER_PROFILES.find(p => p.id === demo.profileId);
-                        if (profile) setSelectedProfile(profile);
-                        setActiveTab('routes');
-                      }}
-                      className="w-full p-3 rounded-xl border border-gray-200 hover:border-teal-300 hover:bg-teal-50 transition-all text-left"
-                    >
-                      <div className="font-medium text-sm text-gray-900">{demo.name}</div>
-                      <div className="text-xs text-gray-500 mt-1">{demo.description}</div>
-                      <div className="text-xs text-teal-600 mt-1.5 font-medium">{demo.expectedOutcome}</div>
-                    </button>
-                  ))}
-                </div>
+                <p className="text-xs text-gray-500">Live mode only. All routes require FortyGuard API. No demo data.</p>
+                <p className="text-xs text-gray-400 mt-1">Powered by FortyGuard Temperature Intelligence + OSRM</p>
               </div>
             </div>
           )}
@@ -507,7 +443,7 @@ export default function HomePage() {
               {isRouting && (
                 <div className="flex items-center justify-center py-8 text-gray-500">
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  <span className="text-sm">Calculating heat-safe routes...</span>
+                  <span className="text-sm">Calculating live heat-safe routes...</span>
                 </div>
               )}
 
@@ -523,7 +459,7 @@ export default function HomePage() {
               {!isRouting && routes.length > 0 && (
                 <div className="space-y-3">
                   <div className="text-xs text-gray-500 font-medium">
-                    {routes.length} route{routes.length !== 1 ? 's' : ''} found
+                    {routes.length} live route{routes.length !== 1 ? 's' : ''} found
                     {selectedProfile && ` for ${selectedProfile.name}`}
                   </div>
                   {routes.map((route, idx) => (
@@ -543,8 +479,8 @@ export default function HomePage() {
               {!isRouting && routes.length === 0 && !routingError && (
                 <div className="text-center py-12 text-gray-400">
                   <Search className="w-8 h-8 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">Set origin & destination to find heat-safe routes</p>
-                  <p className="text-xs mt-1">Click on the map or use demo routes</p>
+                  <p className="text-sm">Set origin & destination for live routes</p>
+                  <p className="text-xs mt-1">Click on map or use current location • Live FortyGuard required</p>
                 </div>
               )}
             </>
