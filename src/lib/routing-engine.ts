@@ -31,7 +31,6 @@ import {
 import { assertInUSA } from '@/lib/usa-bounds';
 
 const OSRM_BASE = process.env.NEXT_PUBLIC_OSRM_BASE_URL || 'https://router.project-osrm.org';
-const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const RESTRICT_USA = process.env.NEXT_PUBLIC_RESTRICT_TO_USA === 'true';
 
 // OSRM Response types
@@ -55,25 +54,6 @@ interface OSRMResponse {
   code: string;
   routes: OSRMRoute[];
   waypoints: Array<{ location: [number, number]; name: string }>;
-}
-
-// Google Maps route types
-export interface GoogleRouteStep {
-  instructions: string;
-  distance: number; // meters
-  duration: number; // seconds
-  maneuver?: { instruction: string; type: string };
-}
-
-export interface GoogleRouteLeg {
-  steps: GoogleRouteStep[];
-  summary: string;
-}
-
-export interface GoogleRoute {
-  legs: GoogleRouteLeg[];
-  overview_polyline: { points: string };
-  summary: string;
 }
 
 // Decode Google polyline
@@ -173,72 +153,13 @@ async function getOSRMRoute(
   return data.routes;
 }
 
-// Google Maps Directions API
-async function getGoogleRoute(
-  origin: Coordinates,
-  destination: Coordinates
-): Promise<GoogleRoute | null> {
-  if (!GOOGLE_API_KEY) {
-    console.warn('Google Maps API key not configured');
-    return null;
-  }
-  
-  try {
-    const url = 'https://maps.googleapis.com/maps/api/directions/json?';
-    const params = new URLSearchParams({
-      origin: `${origin.lat},${origin.lng}`,
-      destination: `${destination.lat},${destination.lng}`,
-      key: GOOGLE_API_KEY,
-      mode: 'walking',
-    });
-    
-    const fullUrl = url + params.toString();
-    const response = await fetch(fullUrl);
-    const data = await response.json();
-    
-    if (data.status !== 'OK' || !data.routes.length) {
-      console.warn('Google Maps routing failed:', data.status);
-      return null;
-    }
-    
-    const route = data.routes[0];
-    const encodedPolyline = route.overview_polyline.points;
-    
-    // Decode polyline to coordinates
-    const coords = decodePolyline(encodedPolyline);
-    
-    // Transform steps
-    const googleSteps: GoogleRouteStep[] = [];
-    for (const step of route.steps) {
-      googleSteps.push({
-        instructions: step.instructions || '',
-        distance: step.distance || 0,
-        duration: step.duration || 0,
-        maneuver: step.maneuver || undefined,
-      });
-    }
-    
-    return {
-      legs: [{ steps: googleSteps, summary: route.summary || '' }],
-      overview_polyline: { points: encodedPolyline },
-      summary: route.summary || '',
-    };
-  } catch (err) {
-    console.error('Google Maps routing error:', err);
-    return null;
-  }
-}
-
 // Expand route with heat data
 async function enrichRouteWithHeatData(
-  route: OSRMRoute | GoogleRoute,
+  route: OSRMRoute,
   profile: UserProfile,
   timestamp?: string
 ): Promise<RouteOption> {
-  // Extract coordinates from either route type
-  const coords = 'overview_polyline' in route 
-    ? decodePolyline(route.overview_polyline.points)
-    : decodePolyline(route.geometry);
+  const coords = decodePolyline(route.geometry);
   
   // Get bounding box for heat data
   const bounds = getBoundsFromCoords(coords);
@@ -256,17 +177,13 @@ async function enrichRouteWithHeatData(
   // Calculate shade score
   const shadeScore = calculateShadeScore(coords, streetSegments);
   
-  // Build route segments from steps
+  // Build route segments from OSRM steps
   const segments: RouteSegment[] = [];
   let cumulativeDistance = 0;
   
   for (const leg of route.legs) {
     for (const step of leg.steps) {
-      // Extract step coordinates from either route type
-      const stepCoords = 'geometry' in step 
-        ? decodePolyline(step.geometry)
-        : coords; // For Google routes, use full route coords if no step geometry
-      
+      const stepCoords = decodePolyline(step.geometry);
       const stepEnvParams = interpolateEnvParams(stepCoords, heatData, heatCoords);
       
       // Calculate average WBGT for this step
@@ -287,8 +204,8 @@ async function enrichRouteWithHeatData(
         shadeCoverage: stepShadeScore,
         wbgt: avgWbgt,
         riskScore: 0, // Will calculate below
-        instructions: step.maneuver?.instruction,
-        streetName: ('name' in step ? step.name : undefined) || undefined,
+        instructions: step.maneuver.instruction,
+        streetName: step.name || undefined,
       };
       
       // Calculate risk score
@@ -300,8 +217,8 @@ async function enrichRouteWithHeatData(
   }
   
   // Calculate totals
-  const totalDistance = 'distance' in route ? route.distance : 0;
-  const totalDuration = 'duration' in route ? route.duration : 0;
+  const totalDistance = route.distance;
+  const totalDuration = route.duration;
   const totalHeatExposure = segments.reduce((sum, s) => sum + s.heatExposure, 0);
   const averageWbgt = segments.reduce((sum, s) => sum + s.wbgt * s.distance, 0) / totalDistance;
   const maxRiskScore = Math.max(...segments.map(s => s.riskScore));
@@ -481,29 +398,14 @@ export async function calculateHeatAwareRoutes(
   const warnings: string[] = [];
   
   try {
-    // Try Google Maps Directions API first, then OSRM fallback
-    const googleRoute = await getGoogleRoute(request.origin, request.destination);
-    let routes;
-    
-    if (googleRoute) {
-      // Use Google Maps route enriched with FortyGuard heat data
-      const enrichedRoute = await enrichRouteWithHeatData(googleRoute, profile, timestamp);
-      // Create mode variants from the Google route
-      routes = [
-        { ...enrichedRoute, id: `google_fastest`, name: 'fastest' as const, label: 'Fastest', color: '#3b82f6' },
-        { ...enrichedRoute, id: `google_coolest`, name: 'coolest' as const, label: 'Coolest', color: '#14b8a6' },
-        { ...enrichedRoute, id: `google_balanced`, name: 'balanced' as const, label: 'Balanced', color: '#8b5cf6' },
-      ];
-    } else {
-      // Fallback to OSRM routing
-      routes = await generateRouteAlternatives(
-        request.origin,
-        request.destination,
-        profile,
-        request.mode,
-        timestamp
-      );
-    }
+    // Get routes for requested mode
+    const routes = await generateRouteAlternatives(
+      request.origin,
+      request.destination,
+      profile,
+      request.mode,
+      timestamp
+    );
     
     // If avoidHighHeat, filter out dangerous routes
     let filteredRoutes = routes;
