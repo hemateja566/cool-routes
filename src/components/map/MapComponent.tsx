@@ -7,6 +7,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { Coordinates, RouteOption, BoundingBox } from '@/types';
 import { getHeatmap } from '@/lib/fortyguard-api';
+import { USA_BOUNDS } from '@/lib/usa-bounds';
 import { clsx } from 'clsx';
 
 interface MapComponentProps {
@@ -54,8 +55,8 @@ export function MapComponent({
     if (map.current || !mapContainer.current) return;
 
     const mapStyle = process.env.NEXT_PUBLIC_MAP_STYLE_URL || 
-      'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
-
+      'https://tiles.openfreemap.org/styles/liberty';
+    
     let newMap: maplibregl.Map;
     try {
       newMap = new maplibregl.Map({
@@ -67,6 +68,8 @@ export function MapComponent({
         bearing: 0,
         antialias: true,
         preserveDrawingBuffer: true,
+        maxBounds: [[USA_BOUNDS.minLng, USA_BOUNDS.minLat], [USA_BOUNDS.maxLng, USA_BOUNDS.maxLat]],
+        renderWorldCopies: false,
       });
     } catch (err) {
       setMapError('Failed to initialize map');
@@ -152,6 +155,38 @@ export function MapComponent({
           'heatmap-opacity': showHeatmap ? heatmapOpacity : 0,
         },
       });
+    }
+
+    // Add 3D buildings layer - shows every building clearly
+    if (!mapInstance.getLayer('3d-buildings')) {
+      // Find label layer to insert below
+      const layers = mapInstance.getStyle().layers;
+      let labelLayerId: string | undefined;
+      for (const layer of layers) {
+        if (layer.type === 'symbol' && (layer as any).layout?.['text-field']) {
+          labelLayerId = layer.id;
+          break;
+        }
+      }
+      // OpenFreeMap Liberty uses 'building' source
+      const buildingSource = (mapInstance.getStyle().sources as any)?.openmaptiles ? 'openmaptiles' : 'openmaptiles';
+      if (mapInstance.getSource(buildingSource)) {
+        try {
+          mapInstance.addLayer({
+            id: '3d-buildings',
+            source: buildingSource,
+            'source-layer': 'building',
+            type: 'fill-extrusion',
+            minzoom: 14,
+            paint: {
+              'fill-extrusion-color': '#d6d6d6',
+              'fill-extrusion-height': ['get', 'render_height'],
+              'fill-extrusion-base': ['get', 'render_min_height'],
+              'fill-extrusion-opacity': 0.6,
+            },
+          }, labelLayerId);
+        } catch (e) { /* building layer optional */ }
+      }
     }
 
     // Route layers will be added dynamically
