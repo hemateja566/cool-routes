@@ -159,7 +159,7 @@ export default function HomePage() {
     }
   }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng, selectedProfile?.id, selectedMode, avoidHighHeat]);
 
-  // Handle map click for origin/destination
+  // Handle map click - max 2 locations, update destination if both exist
   const handleMapClick = (coords: { lat: number; lng: number }) => {
     if (!origin) {
       setOrigin(coords);
@@ -168,10 +168,9 @@ export default function HomePage() {
       setDestination(coords);
       setDestInput(`${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
     } else {
-      setOrigin(coords);
-      setOriginInput(`${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
-      setDestination(null);
-      setDestInput('');
+      // Both set - update destination (visible route stays)
+      setDestination(coords);
+      setDestInput(`${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
     }
   };
 
@@ -252,52 +251,84 @@ export default function HomePage() {
 
       {/* Side Panel */}
       <div className="absolute top-16 left-0 bottom-0 w-full sm:w-96 z-20 flex flex-col bg-white/95 backdrop-blur-md shadow-2xl border-r border-gray-200 overflow-hidden">
-        {/* Location Inputs */}
+        {/* Location Inputs - MAX 2 LOCATIONS */}
         <div className="p-4 border-b border-gray-100 space-y-3">
-          <div className="relative">
-            <MapPin className="absolute left-3 top-3 w-4 h-4 text-green-500" />
-            <input
-              type="text"
-              placeholder="Origin (click map or use current location)"
-              value={originInput}
-              onChange={(e) => setOriginInput(e.target.value)}
-              className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            />
-            {origin && (
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-600">
+              {origin && destination ? '2/2 locations set • Route visible' : origin || destination ? '1/2 location set • Click map for second' : '0/2 locations • Click map to set points'}
+            </p>
+            {(origin || destination) && (
               <button
-                onClick={() => { setOrigin(null); setOriginInput(''); }}
-                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                onClick={() => { setOrigin(null); setDestination(null); setOriginInput(''); setDestInput(''); setRoutes([]); setRoutingError(null); }}
+                className="text-xs text-red-500 hover:text-red-700 font-medium"
               >
-                <X className="w-4 h-4" />
+                Clear all
               </button>
             )}
           </div>
-
-          <div className="relative">
-            <Navigation className="absolute left-3 top-3 w-4 h-4 text-red-500" />
-            <input
-              type="text"
-              placeholder="Destination (click map)"
-              value={destInput}
-              onChange={(e) => setDestInput(e.target.value)}
-              className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            />
-            {destination && (
-              <button
-                onClick={() => { setDestination(null); setDestInput(''); }}
-                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">1</span> Origin
+              {origin && <span className="ml-auto text-xs text-green-600 font-normal">✓ set • <button onClick={() => { setOrigin(null); setOriginInput(''); }} className="underline hover:text-red-600">Remove</button></span>}
+            </label>
+            <div className="relative">
+              <MapPin className="absolute left-3 top-3 w-4 h-4 text-green-500" />
+              <input
+                type="text"
+                readOnly
+                placeholder="Click map or use current location"
+                value={originInput}
+                onChange={(e) => setOriginInput(e.target.value)}
+                className={cn("w-full pl-9 pr-10 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent", origin ? "bg-green-50 border-green-300 text-gray-900" : "bg-gray-50 border-gray-200")}
+              />
+              {origin && (
+                <button
+                  onClick={() => { setOrigin(null); setOriginInput(''); }}
+                  className="absolute right-2 top-2 p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-300 shadow-sm"
+                  title="Remove origin"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
-          <button
-            onClick={swapOriginDestination}
-            className="w-full py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
-          >
-            Swap Origin / Destination
-          </button>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">2</span> Destination
+              {destination && <span className="ml-auto text-xs text-red-600 font-normal">✓ set • <button onClick={() => { setDestination(null); setDestInput(''); }} className="underline hover:text-red-600">Remove</button></span>}
+            </label>
+            <div className="relative">
+              <Navigation className="absolute left-3 top-3 w-4 h-4 text-red-500" />
+              <input
+                type="text"
+                readOnly
+                placeholder="Click map for destination"
+                value={destInput}
+                onChange={(e) => setDestInput(e.target.value)}
+                className={cn("w-full pl-9 pr-10 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent", destination ? "bg-red-50 border-red-300 text-gray-900" : "bg-gray-50 border-gray-200")}
+              />
+              {destination && (
+                <button
+                  onClick={() => { setDestination(null); setDestInput(''); }}
+                  className="absolute right-2 top-2 p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-300 shadow-sm"
+                  title="Remove destination"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {origin && destination && (
+            <button
+              onClick={swapOriginDestination}
+              className="w-full py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center gap-1.5"
+            >
+              <ChevronRight className="w-4 h-4 rotate-90" /> Swap Origin / Destination
+            </button>
+          )}
+          <p className="text-xs text-gray-400 text-center">Route line appears on map between the 2 points</p>
         </div>
 
         {/* Tabs */}

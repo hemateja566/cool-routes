@@ -253,11 +253,10 @@ export function MapComponent({
           'line-join': 'round',
         },
         paint: {
-          'line-color': route.color,
-          'line-width': isSelected ? 6 : 4,
-          'line-opacity': isSelected ? 1 : 0.7,
-          'line-dasharray': isSelected ? [0, 0] : [8, 4],
-        },
+           'line-color': route.color,
+           'line-width': isSelected ? 8 : 5,
+           'line-opacity': 1,
+         },
       });
       
       // Add selected route highlight
@@ -271,10 +270,10 @@ export function MapComponent({
             'line-join': 'round',
           },
           paint: {
-            'line-color': '#ffffff',
-            'line-width': 8,
-            'line-opacity': 0.3,
-          },
+             'line-color': '#ffffff',
+             'line-width': 12,
+             'line-opacity': 0.4,
+           },
         }, layerId); // Insert before the main route layer
       }
       
