@@ -121,36 +121,58 @@ export default function HomePage() {
     );
   };
 
-  // ===== ROUTE CALCULATION - LIVE ONLY =====
+  // ===== ROUTE CALCULATION - BLUEPRINT BEST-ROUTE API =====
   const handleCalculateRoutes = useCallback(async () => {
     if (!origin || !destination) return;
     setIsRouting(true);
     setRoutingError(null);
     try {
-      const request = {
-        origin,
-        destination,
-        profileId: selectedProfile.id,
-        mode: selectedMode,
-        avoidHighHeat,
-        maxDetourFactor: 1.5,
-      };
-      const response = await calculateHeatAwareRoutes(request);
-      
-      if (!response?.routes?.length) {
-        throw new Error('No routes returned from live API');
+      const res = await fetch('/api/best-route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          origin,
+          destination,
+          profileId: selectedProfile.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.routes?.length) {
+        throw new Error(data.error || 'Failed to calculate heat-safe routes');
       }
-      setRoutes(response.routes);
-      setLastRouteResponse(response);
-      setSelectedRoute(response.routes[0]);
+
+      setRoutes(data.routes);
+      setLastRouteResponse({
+        routes: data.routes,
+        request: { origin, destination, profileId: selectedProfile.id, mode: selectedMode },
+        timestamp: new Date().toISOString(),
+        heatmapBounds: {
+          minLat: Math.min(origin.lat, destination.lat) - 0.01,
+          maxLat: Math.max(origin.lat, destination.lat) + 0.01,
+          minLng: Math.min(origin.lng, destination.lng) - 0.01,
+          maxLng: Math.max(origin.lng, destination.lng) + 0.01,
+        },
+        warnings: [],
+      });
+      
+      // Select best route (first one, sorted by comfort score)
+      const initial = data.routes.find((r: any) => r.name === selectedMode) || data.routes[0];
+      setSelectedRoute(initial);
+
+      // If fortyguard data was returned with route
+      if (data.fortyguard) {
+        setLiveStatus('completed');
+        setLiveInfo(`Live FortyGuard: ${data.fortyguard.baseTemp}°C • Heat Index ${data.fortyguard.baseHeatIndex}°C • Humidity ${data.fortyguard.baseHumidity}%`);
+      }
     } catch (err: any) {
       console.error('Routing error:', err?.message);
-      setRoutingError(err?.message || 'Failed to calculate live routes. Check FortyGuard API and try again.');
+      setRoutingError(err?.message || 'Failed to calculate live routes. Check FortyGuard API.');
       setRoutes([]);
     } finally {
       setIsRouting(false);
     }
-  }, [origin, destination, selectedProfile, selectedMode, avoidHighHeat, setRoutes, setSelectedRoute, setIsRouting, setRoutingError, setLastRouteResponse]);
+  }, [origin, destination, selectedProfile, selectedMode, setRoutes, setSelectedRoute, setIsRouting, setRoutingError, setLastRouteResponse]);
 
   // Auto-calculate routes when origin/destination change
   useEffect(() => {

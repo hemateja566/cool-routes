@@ -77,6 +77,11 @@ export interface RouteOption {
   shadePercentage: number;
   waterStops: WaterStop[];
   geometry: Coordinates[]; // Full route polyline
+  distance_km?: number;
+  duration_min?: number;
+  avg_temp_c?: number;
+  max_temp_c?: number;
+  comfort_score?: number; // 0-100 comfort score matching blueprint
 }
 
 export interface WaterStop {
